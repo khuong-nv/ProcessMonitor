@@ -276,7 +276,8 @@ class MainWindow(QMainWindow):
         self.placeholder_widget = QWidget()
         placeholder_layout = QVBoxLayout(self.placeholder_widget)
         placeholder_label = QLabel("No processes are being monitored.\n\n"
-                                   "Use the 'Actions -> Add Process...' menu to start monitoring a process.")
+                                   "Use the 'Actions -> Add Process...' menu to start monitoring a process.\n\n"
+                                      "For more information, check the 'Help -> User Guide' menu.")
         placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         placeholder_label.setStyleSheet("font-size: 16px; color: gray;")
         placeholder_layout.addWidget(placeholder_label)
