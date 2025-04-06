@@ -23,7 +23,7 @@ pg.setConfigOption('foreground', 'k') # Chữ đen
 # -----------------------------
 
 # --- Hằng số ---
-INITIAL_UPDATE_INTERVAL_MS = 2000  # 2 giây
+INITIAL_UPDATE_INTERVAL_MS = 3000  # 3 giây
 PLOT_LINE_WIDTH = 2 # *** Độ dày của đường đồ thị ***
 # ---------------
 
@@ -262,7 +262,7 @@ class IntervalDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Process Monitor")
+        self.setWindowTitle("Process Monitor @v1.0-khuongnv2")
         self.setGeometry(100, 100, 900, 700)
 
         self.monitored_processes = {}
@@ -271,12 +271,27 @@ class MainWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabsClosable(True)
         self.tab_widget.tabCloseRequested.connect(self.close_tab)
-        self.setCentralWidget(self.tab_widget)
 
+        # Placeholder widget for when no processes are monitored
+        self.placeholder_widget = QWidget()
+        placeholder_layout = QVBoxLayout(self.placeholder_widget)
+        placeholder_label = QLabel("No processes are being monitored.\n\n"
+                                   "Use the 'Actions -> Add Process...' menu to start monitoring a process.")
+        placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder_label.setStyleSheet("font-size: 16px; color: gray;")
+        placeholder_layout.addWidget(placeholder_label)
+
+        self.setCentralWidget(self.tab_widget)
+        self.tab_widget.addTab(self.placeholder_widget, "Welcome")
+        self.tab_widget.tabBar().setVisible(False)  # Hide the tab bar when only the placeholder is shown
+
+        # Menu bar
         menu_bar = self.menuBar()
         action_menu = menu_bar.addMenu("&Actions")
         settings_menu = menu_bar.addMenu("&Settings")
+        help_menu = menu_bar.addMenu("&Help")  # Add Help menu
 
+        # Actions menu
         add_action = QAction("&Add Process...", self)
         add_action.triggered.connect(self.add_process_dialog)
         action_menu.addAction(add_action)
@@ -287,11 +302,46 @@ class MainWindow(QMainWindow):
         exit_action.triggered.connect(self.close)
         action_menu.addAction(exit_action)
 
+        # Settings menu
         interval_action = QAction("Set &Update Interval...", self)
         interval_action.triggered.connect(self.set_update_interval_dialog)
         settings_menu.addAction(interval_action)
 
+        # Help menu
+        guide_action = QAction("&User Guide", self)
+        guide_action.triggered.connect(self.show_user_guide)
+        help_menu.addAction(guide_action)
+
         self.show()
+
+    def show_user_guide(self):
+        """Hiển thị hướng dẫn sử dụng."""
+        guide_text = (
+            "<h2>Process Monitor User Guide</h2>"
+            "<p><b>Welcome to Process Monitor!</b></p>"
+            "<p>This application allows you to monitor the CPU and RAM usage of specific processes in real-time.</p>"
+            "<h3>How to Use:</h3>"
+            "<ul>"
+            "  <li><b>Add a Process:</b> Go to <i>Actions -> Add Process...</i> and enter the name of the process you want to monitor.</li>"
+            "  <li><b>Set Update Interval:</b> Go to <i>Settings -> Set Update Interval...</i> to adjust the frequency of updates (in seconds).</li>"
+            "  <li><b>Close a Tab:</b> Click the close button on a tab to stop monitoring a process.</li>"
+            "  <li><b>Exit:</b> Go to <i>Actions -> Exit</i> to close the application.</li>"
+            "</ul>"
+            "<h3>Features:</h3>"
+            "<ul>"
+            "  <li>Real-time CPU and RAM usage monitoring.</li>"
+            "  <li>Adjustable display duration for plots.</li>"
+            "  <li>Dynamic addition and removal of monitored processes.</li>"
+            "</ul>"
+            "<h3>Notes:</h3>"
+            "<ul>"
+            "  <li>Ensure you have the necessary permissions to monitor the selected processes.</li>"
+            "  <li>Processes that terminate will automatically stop being monitored.</li>"
+            "</ul>"
+            "<p>For further assistance, contact support at <i>khuongnv2@viettel.com.vn</i>.</p>"
+        )
+
+        QMessageBox.information(self, "User Guide", guide_text)
 
     def find_process_by_name(self, target_name):
         """Tìm process dựa trên tên (không phân biệt hoa thường)."""
@@ -351,7 +401,11 @@ class MainWindow(QMainWindow):
         worker.process_error.connect(self.handle_process_error)
 
         # Chỉ thêm tab và lưu thông tin nếu worker được khởi tạo thành công
-        if worker.timer is not None: # Kiểm tra xem timer có được tạo không (tức là ko lỗi ngay)
+        if worker.timer is not None:  # Kiểm tra xem timer có được tạo không (tức là ko lỗi ngay)
+            if self.tab_widget.indexOf(self.placeholder_widget) != -1:
+                self.tab_widget.removeTab(self.tab_widget.indexOf(self.placeholder_widget))
+                self.tab_widget.tabBar().setVisible(True)  # Show the tab bar when a process is added
+
             tab_index = self.tab_widget.addTab(tab_content, f"{process_name} ({pid})")
             self.tab_widget.setCurrentIndex(tab_index)
 
@@ -363,7 +417,7 @@ class MainWindow(QMainWindow):
             self._update_tab_indices()
         else:
             # Nếu worker bị lỗi ngay khi tạo, không thêm tab và báo lỗi
-             QMessageBox.critical(self,"Initialization Error", f"Could not start monitoring process '{process_name}' (PID: {pid}). It might have terminated or access was denied.")
+            QMessageBox.critical(self, "Initialization Error", f"Could not start monitoring process '{process_name}' (PID: {pid}). It might have terminated or access was denied.")
 
 
     def close_tab(self, index):
@@ -380,7 +434,12 @@ class MainWindow(QMainWindow):
                 print(f"Stopped monitoring process PID: {pid_to_remove}")
 
             self.tab_widget.removeTab(index)
-            self._update_tab_indices() # Cập nhật index sau khi xóa
+            self._update_tab_indices()  # Cập nhật index sau khi xóa
+
+        # Show the placeholder widget if no tabs are left
+        if self.tab_widget.count() == 0:
+            self.tab_widget.addTab(self.placeholder_widget, "Welcome")
+            self.tab_widget.tabBar().setVisible(False)  # Hide the tab bar when only the placeholder is shown
 
     def _update_tab_indices(self):
         """Cập nhật lại 'tab_index' trong self.monitored_processes."""
