@@ -14,6 +14,8 @@ from PyQt6.QtGui import QAction, QCloseEvent
 
 # pyqtgraph cần được cài đặt: pip install pyqtgraph psutil PyQt6
 import pyqtgraph as pg
+import random
+
 
 # --- Cấu hình cho pyqtgraph ---
 pg.setConfigOption('background', 'w') # Nền trắng
@@ -73,7 +75,7 @@ class ProcessMonitorWorker(QObject):
 
     def fetch_data(self):
         """Lấy dữ liệu CPU và RAM."""
-        if not self._running or not self.timer: # Kiểm tra cả self._running và self.timer
+        if not self._running or not self.timer:  # Kiểm tra cả self._running và self.timer
             return
 
         try:
@@ -83,13 +85,17 @@ class ProcessMonitorWorker(QObject):
                 self.stop()
                 return
 
+            # Lấy % CPU và chuyển sang IRIX mode
             cpu_percent = self.process.cpu_percent(interval=None)
+            num_cores = psutil.cpu_count(logical=True)
+            cpu_percent_irix = cpu_percent / num_cores  # Normalize to IRIX mode
+
             memory_info = self.process.memory_info()
+            memory_mb = (memory_info.rss - memory_info.shared) / (1000 * 1000)  # Chuyển byte sang MB
+            absolute_timestamp = datetime.now().timestamp()  # Lấy timestamp tuyệt đối
 
-            memory_mb = (memory_info.rss -memory_info.shared)/ (1000 * 1000) # Chuyển byte sang MB
-            absolute_timestamp = datetime.now().timestamp() # Lấy timestamp tuyệt đối
-
-            self.data_updated.emit(self.pid, absolute_timestamp, cpu_percent, memory_mb)
+            # Emit dữ liệu CPU đã được chuẩn hóa
+            self.data_updated.emit(self.pid, absolute_timestamp, cpu_percent_irix, memory_mb)
 
         except psutil.NoSuchProcess:
             self.process_terminated.emit(self.pid)
@@ -99,8 +105,6 @@ class ProcessMonitorWorker(QObject):
             self.stop()
         except Exception as e:
             self.process_error.emit(self.pid, f"Lỗi không xác định khi lấy dữ liệu: {e}")
-            # Cân nhắc dừng worker tùy theo lỗi
-            # self.stop()
 
 
 class ProcessTabWidget(QWidget):
@@ -110,34 +114,48 @@ class ProcessTabWidget(QWidget):
         self.pid = pid
         self.process_name = process_name
         self.terminated = False
-        self.start_time = time.time() # Ghi lại thời điểm bắt đầu monitor cho tab này
+        self.start_time = time.time()  # Ghi lại thời điểm bắt đầu monitor cho tab này
 
-        # Dữ liệu cho đồ thị (giới hạn số điểm)
+        # Dữ liệu cho đồ thị (lưu toàn bộ lịch sử)
         self.time_data = []
         self.cpu_data = []
         self.ram_data = []
+        self.display_duration = 1800  # Mặc định hiển thị 60 giây gần nhất
 
         # --- Giao diện ---
         layout = QVBoxLayout(self)
 
         # Khu vực hiển thị thông tin hiện tại
         info_layout = QHBoxLayout()
-        self.cpu_label = QLabel("CPU: -- %")
+        self.cpu_label = QLabel("CPU (IRIX Mode): -- %")
         self.ram_label = QLabel("RAM: -- MB")
-        self.status_label = QLabel(f"Monitoring PID: {self.pid}") # Hiển thị trạng thái
+        self.status_label = QLabel(f"Monitoring PID: {self.pid}")  # Hiển thị trạng thái
         info_layout.addWidget(self.cpu_label)
         info_layout.addWidget(self.ram_label)
         info_layout.addStretch()
         info_layout.addWidget(self.status_label)
         layout.addLayout(info_layout)
 
+        # Spinbox để đặt thời gian hiển thị
+        duration_layout = QHBoxLayout()
+        duration_label = QLabel("Display Duration (s):")
+        self.duration_spinbox = QSpinBox()
+        self.duration_spinbox.setMinimum(10)  # Tối thiểu 10 giây
+        self.duration_spinbox.setMaximum(3600000)  # Tối đa 1000 giờ
+        self.duration_spinbox.setValue(self.display_duration)
+        self.duration_spinbox.valueChanged.connect(self.update_display_duration)
+        duration_layout.addWidget(duration_label)
+        duration_layout.addWidget(self.duration_spinbox)
+        duration_layout.addStretch()
+
+        layout.addLayout(duration_layout)
+
         # Đồ thị CPU
         self.cpu_plot_widget = pg.PlotWidget(title=f"CPU Usage (%) - {process_name}")
         self.cpu_plot_widget.setLabel('left', 'CPU', units='%')
         self.cpu_plot_widget.setLabel('bottom', 'Time Elapsed', units='s')
         self.cpu_plot_widget.showGrid(x=True, y=True)
-        # *** Thay đổi pen để chỉ định độ dày ***
-        self.cpu_curve = self.cpu_plot_widget.plot(pen={'color':'b', 'width': PLOT_LINE_WIDTH})
+        self.cpu_curve = self.cpu_plot_widget.plot(pen={'color': 'b', 'width': PLOT_LINE_WIDTH})
 
         # Enable downsampling and clipping for CPU plot
         self.cpu_curve.setDownsampling(auto=True, method='mean')
@@ -150,31 +168,55 @@ class ProcessTabWidget(QWidget):
         self.ram_plot_widget.setLabel('left', 'RAM', units='MB')
         self.ram_plot_widget.setLabel('bottom', 'Time Elapsed', units='s')
         self.ram_plot_widget.showGrid(x=True, y=True)
-        # *** Thay đổi pen để chỉ định độ dày ***
-        self.ram_curve = self.ram_plot_widget.plot(pen={'color':'r', 'width': PLOT_LINE_WIDTH})
-                # Enable downsampling and clipping for CPU plot
+        self.ram_curve = self.ram_plot_widget.plot(pen={'color': 'r', 'width': PLOT_LINE_WIDTH})
+
+        # Enable downsampling and clipping for RAM plot
         self.ram_curve.setDownsampling(auto=True, method='mean')
         self.ram_curve.setClipToView(True)
+
         layout.addWidget(self.ram_plot_widget)
         # ---------------
 
+    def update_display_duration(self, value):
+        """Cập nhật thời gian hiển thị trên đồ thị."""
+        self.display_duration = value
+        self.update_plot()  # Cập nhật đồ thị ngay khi thay đổi thời gian hiển thị
+
     def update_data(self, absolute_timestamp, cpu_percent, memory_mb):
         """Cập nhật giao diện và dữ liệu đồ thị."""
-        if self.terminated: return
+        if self.terminated:
+            return
 
-        self.cpu_label.setText(f"CPU: {cpu_percent:.2f} %")
-        self.ram_label.setText(f"RAM: {memory_mb:.2f} MB")
+        # Update the labels to reflect IRIX mode
+        self.cpu_label.setText(f"CPU (IRIX Mode): <b>{cpu_percent:.2f} %</b>")
+        self.ram_label.setText(f"RAM: <b>{memory_mb:.2f} MB</b>")
 
-        # Tính toán thời gian trôi qua kể từ khi bắt đầu monitor tab này
-        elapsed_time = absolute_timestamp - self.start_time
-
-        self.time_data.append(elapsed_time) # Lưu thời gian trôi qua
+        # Lưu toàn bộ dữ liệu lịch sử
+        self.time_data.append(absolute_timestamp - self.start_time)
         self.cpu_data.append(cpu_percent)
         self.ram_data.append(memory_mb)
 
-        # Cập nhật đồ thị với dữ liệu thời gian trôi qua
-        self.cpu_curve.setData(self.time_data, self.cpu_data)
-        self.ram_curve.setData(self.time_data, self.ram_data)
+        # Cập nhật đồ thị
+        self.update_plot()
+
+    def update_plot(self):
+        """Cập nhật đồ thị với dữ liệu trong khoảng thời gian hiển thị."""
+        if not self.time_data:
+            return
+
+        # Lấy thời gian hiện tại và tính khoảng thời gian hiển thị
+        current_time = self.time_data[-1]
+        start_time = current_time - self.display_duration
+
+        # Lọc dữ liệu trong khoảng thời gian hiển thị
+        filtered_time = [t for t in self.time_data if t >= start_time]
+        start_index = len(self.time_data) - len(filtered_time)
+        filtered_cpu = self.cpu_data[start_index:]
+        filtered_ram = self.ram_data[start_index:]
+
+        # Cập nhật đồ thị với dữ liệu đã lọc
+        self.cpu_curve.setData(filtered_time, filtered_cpu)
+        self.ram_curve.setData(filtered_time, filtered_ram)
 
     def mark_terminated(self):
         """Đánh dấu process đã kết thúc và cập nhật giao diện."""
