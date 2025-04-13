@@ -129,9 +129,12 @@ class ProcessTabWidget(QWidget):
         info_layout = QHBoxLayout()
         self.cpu_label = QLabel("CPU (IRIX Mode): -- %")
         self.ram_label = QLabel("RAM: -- MB")
+        self.avg_cpu_label = QLabel("Avg CPU: -- %")  # New label for average CPU
         self.status_label = QLabel(f"Monitoring PID: {self.pid}")  # Hiển thị trạng thái
         info_layout.addWidget(self.cpu_label)
+        info_layout.addWidget(self.avg_cpu_label)  # Add the average CPU label
         info_layout.addWidget(self.ram_label)
+
         info_layout.addStretch()
         info_layout.addWidget(self.status_label)
         layout.addLayout(info_layout)
@@ -206,6 +209,10 @@ class ProcessTabWidget(QWidget):
         self.cpu_data.append(cpu_percent)
         self.ram_data.append(memory_mb)
 
+        # Calculate and update the average CPU usage
+        avg_cpu = sum(self.cpu_data) / len(self.cpu_data)
+        self.avg_cpu_label.setText(f"Avg CPU: <b>{avg_cpu:.2f} %</b>")
+
         # Cập nhật đồ thị
         self.update_plot()
 
@@ -235,6 +242,7 @@ class ProcessTabWidget(QWidget):
         self.status_label.setStyleSheet("color: red;")
         self.cpu_label.setText("CPU: -- %")
         self.ram_label.setText("RAM: -- MB")
+        self.avg_cpu_label.setText("Avg CPU: -- %")  # Cập nhật nhãn CPU trung bình
 
     def mark_error(self, error_message):
         """Hiển thị lỗi trên tab."""
