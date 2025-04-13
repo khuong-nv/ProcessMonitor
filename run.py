@@ -7,7 +7,7 @@ from collections import deque # Sử dụng deque để giới hạn dữ liệu
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QTabWidget, QMenuBar, QInputDialog, QMessageBox, QSpinBox, QDialog,
-    QDialogButtonBox, QFormLayout
+    QDialogButtonBox, QFormLayout, QPushButton
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt6.QtGui import QAction, QCloseEvent
@@ -143,11 +143,16 @@ class ProcessTabWidget(QWidget):
         self.duration_spinbox.setMinimum(10)  # Tối thiểu 10 giây
         self.duration_spinbox.setMaximum(3600000)  # Tối đa 1000 giờ
         self.duration_spinbox.setValue(self.display_duration)
-        self.duration_spinbox.valueChanged.connect(self.update_display_duration)
         duration_layout.addWidget(duration_label)
         duration_layout.addWidget(self.duration_spinbox)
-        duration_layout.addStretch()
 
+        # Add "Apply" button
+        apply_button = QPushButton("Apply")
+        apply_button.setStyleSheet("padding: 4px; font-size: 12px;")
+        apply_button.clicked.connect(self.apply_display_duration)  # Connect to new method
+        duration_layout.addWidget(apply_button)
+
+        duration_layout.addStretch()
         layout.addLayout(duration_layout)
 
         # Đồ thị CPU
@@ -176,6 +181,11 @@ class ProcessTabWidget(QWidget):
 
         layout.addWidget(self.ram_plot_widget)
         # ---------------
+
+    def apply_display_duration(self):
+        """Cập nhật thời gian hiển thị trên đồ thị khi nhấn nút Apply."""
+        self.display_duration = self.duration_spinbox.value()
+        self.update_plot()  # Cập nhật đồ thị ngay khi thay đổi thời gian hiển thị
 
     def update_display_duration(self, value):
         """Cập nhật thời gian hiển thị trên đồ thị."""
