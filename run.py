@@ -130,10 +130,12 @@ class ProcessTabWidget(QWidget):
         self.cpu_label = QLabel("CPU (IRIX Mode): -- %")
         self.ram_label = QLabel("RAM: -- MB")
         self.avg_cpu_label = QLabel("Avg CPU: -- %")  # New label for average CPU
+        self.monitor_duration_label = QLabel("Monitor Duration: 00:00:00")
         self.status_label = QLabel(f"Monitoring PID: {self.pid}")  # Hiển thị trạng thái
         info_layout.addWidget(self.cpu_label)
         info_layout.addWidget(self.avg_cpu_label)  # Add the average CPU label
         info_layout.addWidget(self.ram_label)
+        info_layout.addWidget(self.monitor_duration_label)
 
         info_layout.addStretch()
         info_layout.addWidget(self.status_label)
@@ -205,13 +207,20 @@ class ProcessTabWidget(QWidget):
         self.ram_label.setText(f"RAM: <b>{memory_mb:.2f} MB</b>")
 
         # Lưu toàn bộ dữ liệu lịch sử
-        self.time_data.append(absolute_timestamp - self.start_time)
+        elapsed = absolute_timestamp - self.start_time
+        self.time_data.append(elapsed)
         self.cpu_data.append(cpu_percent)
         self.ram_data.append(memory_mb)
 
         # Calculate and update the average CPU usage
         avg_cpu = sum(self.cpu_data) / len(self.cpu_data)
         self.avg_cpu_label.setText(f"Avg CPU: <b>{avg_cpu:.2f} %</b>")
+
+        # Update monitor duration label
+        hours = int(elapsed // 3600)
+        minutes = int((elapsed % 3600) // 60)
+        seconds = int(elapsed % 60)
+        self.monitor_duration_label.setText(f"Monitor Duration: <b>{hours:02d}:{minutes:02d}:{seconds:02d}</b>")
 
         # Cập nhật đồ thị
         self.update_plot()
@@ -240,9 +249,9 @@ class ProcessTabWidget(QWidget):
         self.terminated = True
         self.status_label.setText(f"PID: {self.pid} (Terminated)")
         self.status_label.setStyleSheet("color: red;")
-        self.cpu_label.setText("CPU: -- %")
-        self.ram_label.setText("RAM: -- MB")
-        self.avg_cpu_label.setText("Avg CPU: -- %")  # Cập nhật nhãn CPU trung bình
+        #self.cpu_label.setText("CPU: -- %")
+        #self.ram_label.setText("RAM: -- MB")
+        #self.avg_cpu_label.setText("Avg CPU: -- %")  # Cập nhật nhãn CPU trung bình
 
     def mark_error(self, error_message):
         """Hiển thị lỗi trên tab."""
